@@ -1,0 +1,91 @@
+version: "3"
+
+vars:
+  MODULE: github.com/applet-one/cli
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  LDFLAGS: >-
+    -s -w
+    -X {{.MODULE}}/internal/version.Version={{.VERSION}}
+    -X {{.MODULE}}/internal/version.Commit={{.COMMIT}}
+  # Uses a local goreleaser when installed, otherwise the pinned release.
+  GORELEASER:
+    sh: command -v goreleaser || echo "go run github.com/goreleaser/goreleaser/v2@v2.19.0"
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build bin/applet for this platform
+    sources: ["**/*.go", go.mod, go.sum]
+    generates: ["bin/applet{{exeExt}}"]
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/applet{{exeExt}} ./cmd/applet
+
+  install:
+    desc: Install applet into GOBIN
+    cmds:
+      - go install -trimpath -ldflags "{{.LDFLAGS}}" ./cmd/applet
+
+  run:
+    desc: "Run the CLI from source, e.g. task run -- status"
+    cmds:
+      - go run ./cmd/applet {{.CLI_ARGS}}
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run unit tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  test:integration:
+    desc: Run tests that download and start workerd
+    env:
+      APPLET_INTEGRATION: "1"
+    cmds:
+      - go test -count=1 -run Integration ./internal/dev/
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format code
+    cmds:
+      - golangci-lint fmt ./...
+
+  tidy:
+    desc: Tidy go.mod and go.sum
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: Lint and test (what CI runs)
+    cmds:
+      - task: lint
+      - task: test:race
+
+  release:check:
+    desc: Validate the GoReleaser configuration
+    cmds:
+      - "{{.GORELEASER}} check"
+
+  release:snapshot:
+    desc: Build all release archives locally into dist/ without publishing
+    cmds:
+      - "{{.GORELEASER}} release --snapshot --clean"
+
+  clean:
+    desc: Remove build output
+    cmds:
+      - rm -rf bin dist
