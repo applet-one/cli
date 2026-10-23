@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, race: "-race" }
+          - { os: ubuntu-24.04-arm, race: "-race" }
+          - { os: macos-15, race: "-race" }
+          - { os: windows-2025, race: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test
+        # APPLET_INTEGRATION downloads workerd and runs `applet dev` end to end.
+        env:
+          APPLET_INTEGRATION: "1"
+        run: go test ${{ matrix.race }} ./...
+
+  snapshot:
+    # Cross-compiles every release target without publishing.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean
+      - name: Smoke test
+        run: |
+          tar -xzf dist/applet_*_linux_amd64.tar.gz -C "$RUNNER_TEMP" applet
+          "$RUNNER_TEMP/applet" --version
+          "$RUNNER_TEMP/applet" init smoke-app
+          cd smoke-app && "$RUNNER_TEMP/applet" build --dry-run

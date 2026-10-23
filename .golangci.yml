@@ -1,0 +1,37 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - usestdlibvars
+  settings:
+    errcheck:
+      # Terminal output and best-effort cleanup.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - os.Remove
+    staticcheck:
+      checks:
+        - all
+        # Errors are complete, user-facing sentences printed as "applet: <message>".
+        - -ST1005
+        - -ST1000
+        - -QF1002
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/applet-one/cli
